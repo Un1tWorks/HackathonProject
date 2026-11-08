@@ -1,0 +1,14 @@
+{
+  "project_name": "DocuSense",
+  "description": "An AI-powered onboarding assistant that retrieves company policies using Streamlit, IBM Db2, LlamaIndex, and Groq.",
+  "participant_name": "Lucian Surdeanu, Ilinca Simion and Vergelea Mihai",
+  "repository_url": "https://github.com/Un1tWorks/HackathonProject",
+  "tech_stack": [
+    "Python 3.11",
+    "Streamlit",
+    "IBM Db2",
+    "Groq LLM",
+    "Hugging Face Embeddings",
+    "PyMuPDF"
+  ]
+}
