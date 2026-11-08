@@ -4,6 +4,7 @@ import tempfile
 import nltk
 import streamlit as st
 from dotenv import load_dotenv
+import pymupdf as fitz 
 
 # Set up NLTK to work within Streamlit's restricted cloud environment
 nltk_data_dir = os.path.join(tempfile.gettempdir(), "nltk_data")
@@ -55,11 +56,11 @@ if not groq_api_key:
     st.error("Missing GROQ_API_KEY! Please add it to Streamlit Secrets or environment variables.")
     st.stop()
 
-# Import LlamaIndex and IBM Db2 dependencies
-from llama_index.core import VectorStoreIndex, Settings, SimpleDirectoryReader, StorageContext
+# Import LlamaIndex and IBM Db2 DB-API dependencies
+from llama_index.core import VectorStoreIndex, Settings, StorageContext, Document
 from llama_index.llms.groq import Groq
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-import ibm_db
+import ibm_db_dbi
 from llama_index.vector_stores.db2 import DB2LlamaVS, DistanceStrategy
 
 # 1. Initialize the correct LLM and Embedding Model
@@ -73,9 +74,9 @@ global_embed = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
 Settings.llm = global_llm
 Settings.embed_model = global_embed
 
-@st.cache_resource(show_spinner="Connecting to IBM Db2 and initializing AI Engine...")
+@st.cache_resource(show_spinner="Connecting to IBM Db2 and initializing clean RAG engine...")
 def load_rag_engine():
-    # Construct the Db2 connection string
+    print("👉 Connecting to IBM Db2 via ibm_db_dbi...")
     conn_str = (
         f"DATABASE={DB2_DATABASE};"
         f"HOSTNAME={DB2_HOSTNAME};"
@@ -85,35 +86,99 @@ def load_rag_engine():
         f"PWD={DB2_PWD};"
     )
     
-    # Establish connection using ibm_db
-    connection = ibm_db.connect(conn_str, "", "")
+    connection = ibm_db_dbi.connect(conn_str, "", "")
     if not connection:
-        raise RuntimeError("Failed to establish connection to IBM Db2 database.")
+        raise RuntimeError("Failed to establish connection to IBM Db2 database using ibm_db_dbi.")
 
-    # Initialize Db2 Vector Store via DB2LlamaVS
+    print("👉 Initializing DB2LlamaVS Vector Store (v4 clean table)...")
     vector_store = DB2LlamaVS(
-        client=connection,
-        table_name="docusense_embeddings",
+        _client=connection,
+        table_name="docusense_embeddings_v4",
+        embed_dim=384,
         distance_strategy=DistanceStrategy.COSINE
     )
     
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     
-    # Check if documents need to be ingested or loaded from existing vector table
-    if os.path.exists("./data") and os.listdir("./data"):
-        documents = SimpleDirectoryReader("./data").load_data()
-        index = VectorStoreIndex.from_documents(
-            documents, 
-            storage_context=storage_context,
-            embed_model=global_embed
-        )
-    else:
+    # Check if table already has data
+    table_has_data = False
+    cursor = connection.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM docusense_embeddings_v4")
+        row = cursor.fetchone()
+        if row and row[0] > 0:
+            table_has_data = True
+    except Exception:
+        table_has_data = False
+    finally:
+        cursor.close()
+
+    if table_has_data:
+        print("⚡ [Db2 Memory Found!] Loading index directly from database...")
         index = VectorStoreIndex.from_vector_store(
             vector_store,
             embed_model=global_embed
         )
+    else:
+        print("🌱 [Clean Ingestion] Parsing documents directly using PyMuPDF (fitz)...")
+        documents = []
+        data_dir = "./data"
+        if os.path.exists(data_dir):
+            for filename in os.listdir(data_dir):
+                filepath = os.path.join(data_dir, filename)
+                # Parse PDFs page by page with PyMuPDF
+                if filename.lower().endswith(".pdf") and os.path.isfile(filepath):
+                    print(f"   📄 Parsing PDF: {filename}")
+                    try:
+                        with fitz.open(filepath) as fitz_doc:
+                            for page_idx, page in enumerate(fitz_doc):
+                                text = page.get_text()
+                                if text.strip():
+                                    documents.append(
+                                        Document(
+                                            text=text,
+                                            metadata={
+                                                "file_name": filename,
+                                                "page_label": str(page_idx + 1)
+                                            }
+                                        )
+                                    )
+                    except Exception as e:
+                        print(f"   ⚠️ Error parsing {filename}: {e}")
+                # Parse regular text files as well
+                elif filename.lower().endswith(".txt") and os.path.isfile(filepath):
+                    print(f"   📄 Parsing Text File: {filename}")
+                    try:
+                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                            text = f.read()
+                            if text.strip():
+                                documents.append(
+                                    Document(
+                                        text=text,
+                                        metadata={
+                                            "file_name": filename,
+                                            "page_label": "1"
+                                        }
+                                    )
+                                )
+                    except Exception as e:
+                        print(f"   ⚠️ Error reading {filename}: {e}")
 
-    # 3. Create and return the Query Engine
+        if documents:
+            index = VectorStoreIndex.from_documents(
+                documents,
+                storage_context=storage_context,
+                embed_model=global_embed
+            )
+            print(f"✅ Clean ingestion complete! Saved {len(documents)} document pages to Db2.")
+        else:
+            print("⚠️ Warning: No valid documents found in './data'.")
+            index = VectorStoreIndex.from_vector_store(
+                vector_store,
+                embed_model=global_embed
+            )
+
+    print("👉 All systems go! Returning query engine...")
     return index.as_query_engine(
         similarity_top_k=3
     )

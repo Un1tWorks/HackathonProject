@@ -1,68 +1,57 @@
-# HackathonProject
+DocuSense: Onboarding Smart Librarian
 
-DocuSense is an AI-powered onboarding assistant designed for enterprises, built specifically for the Db2Hack 2026 hackathon. It serves as an on-demand, 24/7 "smart librarian" that provides new employees with instant, accurate answers to onboarding questions, guidelines, and company policies without burning team bandwidth.
+DocuSense is an AI-powered assistant that answers questions about company documentation, onboarding materials, and internal guidelines using a local RAG pipeline.
+Tech Stack
 
----
+    Frontend: Streamlit
 
-## Table of Contents
-- [Features](#features)
-- [Prerequisites & Setup](#prerequisites)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Usage](#usage)
+    Database / Vector Store: IBM Db2 (via IBM Db2 Developer Extension and DB2LlamaVS)
 
-## Features
-- Native Vector Storage with IBM Db2: Leverages IBM Db2’s native vector capabilities via llama-index-vector-stores-db2 and ibm_db for scalable, robust document retrieval.
-- RAG Architecture (LlamaIndex): Automatically indexes company documents (.pdf, .txt) from a local data repository.
-- Groq LLM Integration: Uses high-speed LLM processing (openai/gpt-oss-120b) for rapid, context-aware responses.
-- Interactive Streamlit UI: A clean, responsive chat interface featuring persistent session state and an expandable Source Citations viewer for transparency and trust.
+    LLM: Groq
 
-## Prerequisites
-1. Clone and Navigate to the Repository
+    Embeddings: Hugging Face (bge-small-en-v1.5)
 
-git clone <your-repository-url>
-cd HackathonProject
+    PDF Parsing: PyMuPDF (fitz)
 
-2. Create and Activate a Python 3.11 Virtual Environment
+    Language: Python 3.11
 
-py -3.11 -m venv .venv
-.venv\Scripts\Activate
+How to Run Locally
+1. Open the Project
+
+Open the project directory in Visual Studio Code.
+2. Create and Activate a Virtual Environment
+
+Run these commands in the VS Code terminal:
+Bash
+
+python -m venv .venv
+.venv\Scripts\activate
 
 3. Install Dependencies
 
-python -m pip install --upgrade pip
-pip install streamlit python-dotenv nltk pymupdf llama-index-core llama-in
+Install the required packages in your active environment:
+Bash
 
-## Configuration
+pip install streamlit llama-index-core llama-index-llms-groq llama-index-embeddings-huggingface llama-index-vector-stores-db2 ibm_db_dbi pymupdf python-dotenv nltk
 
-Create a .env file in the root directory of your project with your Groq API key and IBM Db2 credentials:
+4. Configure Environment Variables
 
-GROQ_API_KEY="your-groq-api-key-here"
+Create a file named .env in the root directory of your project and add your credentials:
+Code snippet
 
-DB2_DATABASE="BLUDB"  
-DB2_HOSTNAME="your-db2-hostname.databases.appdomain.cloud"  
-DB2_PORT="32733"  
-DB2_UID="your-db2-username" 
-DB2_PWD="your-db2-password"
+Hackathonkey=your_groq_api_key_here
+DB2_DATABASE=TESTDB
+DB2_HOSTNAME=127.0.0.1
+DB2_PORT=50000
+DB2_UID=db2inst1
+DB2_PWD=your_local_db2_password
 
-## Project Structure
+5. Add Documents
 
-HackathonProject/  
-│  
-├── app.py              > Main Streamlit application  
-├── requirements.txt    > Python package dependencies  
-├── .env                > Secret environment variables (ignored by git)  
-└── data/               > Folder for company onboarding documents (PDFs/TXTs)  
-    └── onboarding.pdf  > Place your documents here  
+Create a folder named data in your project root (./data/) and put your target PDF or text files inside it.
+6. Run the Application
 
-
-## Usage
-
-Make sure your virtual environment is active and your documents are placed inside the ./data/ folder.
-
-Launch the Streamlit app:
+Start the local Streamlit server:
+Bash
 
 streamlit run app.py
-
-
-Open your browser at http://localhost:8501 and start asking questions!
